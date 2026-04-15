@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚔️ 인생 RPG — 유성의 모험</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+/* ═══════════════════════════════════════════ RESET */
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:100%; height:100vh; overflow:hidden; background:#000; font-family:'Press Start 2P',monospace; color:#c8a86c; }
+input,select,textarea,button { font-family:'Press Start 2P',monospace; }
+
+/* ═══════════════════════════════════════════ LAYOUT */
+#root { display:flex; flex-direction:column; height:100vh; }
+#top  { display:flex; flex:1; overflow:hidden; min-height:0; }
+
+/* ═══════════════════════════════════════════ MAP */
+#mapWrap { flex:1; position:relative; background:#080402; overflow:hidden; }
+#gameCanvas { display:block; image-rendering:pixelated; image-rendering:crisp-edges; }
+
+/* ═══════════════════════════════════════════ OVERLAY PANEL */
+#panel {
+  position:absolute; inset:0;
+  background:rgba(4,3,2,.97);
+  border-right:2px solid #3a2008;
+  display:flex; flex-direction:column;
+  transform:translateX(-100%);
+  transition:transform .22s cubic-bezier(.4,0,.2,1);
+  z-index:10;
+}
+#panel.open { transform:translateX(0); }
+#panelHeader { display:flex; align-items:center; justify-content:space-between; padding:14px 18px 12px; border-bottom:2px solid #1e0e00; flex-shrink:0; }
+#panelTitle  { font-size:9px; color:#fff; letter-spacing:1px; }
+#panelClose  { background:none; border:1px solid #3a2008; color:#c8a86c; font-size:7px; padding:5px 8px; cursor:pointer; }
+#panelClose:hover { background:#1e0e00; }
+#panelBody   { flex:1; overflow-y:auto; padding:16px 18px; }
+#panelBody::-webkit-scrollbar { width:4px; }
+#panelBody::-webkit-scrollbar-thumb { background:#2a1800; }
+
+/* ── Panel: Journal ── */
+.jDate { font-size:6px; color:#5a4030; margin:14px 0 8px; padding-bottom:5px; border-bottom:1px solid #1e1008; }
+.jDate:first-child { margin-top:0; }
+.jEntry { display:flex; align-items:center; gap:10px; padding:8px 10px; background:#0a0704; border:1px solid #1e1008; border-left:3px solid #3a2008; margin-bottom:6px; }
+.jEntry:hover { border-left-color:#aa6020; }
+.jCatIcon { font-size:14px; flex-shrink:0; }
+.jInfo { flex:1; min-width:0; }
+.jName { font-size:7px; color:#c8a86c; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.jMonster { font-size:6px; color:#6a5040; }
+.jRight { display:flex; flex-direction:column; align-items:flex-end; gap:4px; flex-shrink:0; }
+.jGrade { font-size:6px; padding:2px 5px; border:1px solid; }
+.jXp { font-size:6px; color:#4499ff; }
+/* ── Panel: Bestiary ── */
+.bGrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.bCard { background:#0a0704; border:1px solid #1e1008; padding:10px; }
+.bCard:hover { border-color:#3a2008; }
+.bCardTop { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.bIcon { font-size:20px; }
+.bName { font-size:6px; color:#c8a86c; margin-bottom:3px; }
+.bCat  { font-size:5px; color:#5a4030; }
+.bStats { display:flex; justify-content:space-between; padding-top:6px; border-top:1px solid #1a0e04; }
+.bStat  { font-size:5px; color:#6a5040; }
+.bStat span { color:#c8a86c; }
+/* ── Panel: Schedule ── */
+.sWeek { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:16px; }
+.sDay  { text-align:center; padding:8px 4px; background:#0a0704; border:1px solid #1e1008; cursor:pointer; }
+.sDay:hover { border-color:#3a2008; }
+.sDay.today { border-color:#aa6020; background:#120c04; }
+.sDay.today .sDayName { color:#ffcc44; }
+.sDayName { font-size:5px; color:#5a4030; margin-bottom:4px; }
+.sDayNum  { font-size:7px; color:#c8a86c; }
+.sDayDot  { font-size:8px; margin-top:3px; }
+.sSection { font-size:6px; color:#5a4030; margin-bottom:8px; letter-spacing:1px; }
+.sTask { display:flex; align-items:center; gap:8px; padding:8px 10px; background:#0a0704; border:1px solid #1e1008; margin-bottom:5px; cursor:pointer; }
+.sTask:hover { border-color:#3a2008; }
+.sCheck { font-size:10px; flex-shrink:0; }
+.sTaskName { font-size:6px; color:#c8a86c; flex:1; }
+.sTaskTime { font-size:5px; color:#5a4030; }
+.sTaskXp   { font-size:5px; color:#4499ff; }
+.panelAddBtn { width:100%; padding:10px; background:none; border:1px dashed #2a1808; color:#4a3020; font-size:6px; cursor:pointer; margin-top:8px; }
+.panelAddBtn:hover { color:#c8a86c; border-color:#5a3010; }
+/* ── Panel: Memo ── */
+.mCard { background:#0a0704; border:1px solid #1e1008; border-left:3px solid #2a1808; padding:10px 12px; margin-bottom:8px; }
+.mCardHeader { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.mCardTitle { font-size:7px; color:#c8a86c; }
+.mCardDate  { font-size:5px; color:#4a3020; }
+.mCardBody  { font-size:6px; color:#8a7050; line-height:2; font-family:sans-serif; }
+.mCardTag   { display:inline-block; font-size:5px; padding:2px 5px; border:1px solid #3a2008; color:#6a4020; margin-top:6px; }
+/* ── Grade colors (shared) ── */
+.grade-E { color:#888; border-color:#333; }
+.grade-D { color:#33cc33; border-color:#1a5a1a; }
+.grade-C { color:#cccc33; border-color:#5a5a1a; }
+.grade-B { color:#ff9933; border-color:#5a3a1a; }
+.grade-A { color:#ff4444; border-color:#5a1a1a; }
+.grade-S { color:#cc44ff; border-color:#4a1a5a; }
+
+/* ═══════════════════════════════════════════ QUEST MODAL */
+#questModal {
+  display:none; position:fixed; inset:0; z-index:100;
+  background:rgba(0,0,0,.85);
+  align-items:center; justify-content:center;
+}
+#questModal.open { display:flex; }
+
+#questDialog {
+  width:min(520px, 92vw);
+  background:#060402;
+  border:2px solid #3a2008;
+  box-shadow:0 0 0 1px #1a0a00, 0 0 40px rgba(200,120,0,.15);
+  display:flex; flex-direction:column;
+  max-height:90vh;
+}
+
+#questDialogHeader {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 16px;
+  border-bottom:2px solid #1e0e00;
+  flex-shrink:0;
+}
+
+#questDialogHeader span { font-size:8px; color:#fff; }
+#questDialogClose { background:none; border:1px solid #3a2008; color:#c8a86c; font-size:7px; padding:4px 8px; cursor:pointer; }
+#questDialogClose:hover { background:#1e0e00; }
+
+#questDialogBody { padding:16px; overflow-y:auto; flex:1; }
+#questDialogBody::-webkit-scrollbar { width:3px; }
+
+.qRow { margin-bottom:14px; }
+.qLabel { font-size:6px; color:#706050; margin-bottom:6px; display:block; }
+.qInput, .qSelect, .qTextarea {
+  width:100%; background:#0a0704; border:1px solid #2a1a08;
+  color:#c8a86c; padding:8px 10px; font-size:7px;
+  outline:none; transition:border-color .15s;
+}
+.qInput:focus, .qSelect:focus, .qTextarea:focus { border-color:#8a5020; }
+.qSelect option { background:#0a0704; }
+.qTextarea { height:70px; resize:vertical; line-height:1.8; font-family:sans-serif; font-size:12px; }
+.qRow.inline { display:flex; align-items:center; gap:10px; }
+.qRow.inline .qInput { width:80px; }
+.qRow.inline span { font-size:6px; color:#5a4030; }
+
+/* AI Result box */
+#aiResultBox {
+  display:none; margin:12px 0 0;
+  background:#080604; border:1px solid #3a2a08;
+  border-left:3px solid #cc8820; padding:12px;
+}
+#aiResultBox.show { display:block; }
+.aiResultTitle { font-size:6px; color:#8a6020; margin-bottom:8px; }
+.aiResultGrid  { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px; }
+.aiItem { }
+.aiItemKey { font-size:5px; color:#5a4020; margin-bottom:3px; }
+.aiItemVal { font-size:8px; color:#ffcc44; }
+.aiAnalysis { font-size:6px; color:#9a8060; line-height:1.8; font-family:sans-serif; padding-top:8px; border-top:1px solid #1e1008; }
+
+/* Dialog buttons */
+#questDialogFooter { display:flex; gap:8px; padding:12px 16px; border-top:2px solid #1e0e00; flex-shrink:0; }
+.qBtn { flex:1; padding:10px; font-size:7px; cursor:pointer; border:none; transition:opacity .15s; }
+.qBtn:disabled { opacity:.35; cursor:default; }
+.qBtnAnalyze { background:#3a2080; color:#aaa0ff; border:1px solid #5a3a9a; }
+.qBtnAnalyze:hover:not(:disabled) { background:#4a2898; }
+.qBtnSave    { background:#1a5a20; color:#66ee88; border:1px solid #2a8a30; }
+.qBtnSave:hover:not(:disabled) { background:#226628; }
+
+/* Loading spinner text */
+.loadingText { color:#5a4030; font-size:6px; animation:blink 1s step-end infinite; }
+@keyframes blink { 50%{ opacity:0; } }
+
+/* ═══════════════════════════════════════════ LEVEL UP */
+#levelUpBanner {
+  display:none; position:fixed; inset:0; z-index:200;
+  align-items:center; justify-content:center;
+  background:rgba(0,0,0,.7); flex-direction:column; gap:16px;
+}
+#levelUpBanner.show { display:flex; animation:fadeIn .4s ease; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.luTitle { font-size:24px; color:#ffcc22; text-shadow:0 0 20px #ff8800; letter-spacing:2px; }
+.luSub   { font-size:9px; color:#c8a86c; }
+.luClose { margin-top:8px; background:none; border:2px solid #cc8820; color:#ffcc44; font-size:8px; padding:10px 20px; cursor:pointer; }
+
+/* ═══════════════════════════════════════════ SIDEBAR */
+#sidebar { width:248px; min-width:248px; background:#040404; border-left:2px solid #1e0e00; display:flex; flex-direction:column; overflow:hidden; }
+
+/* STATS */
+#statsPanel { flex:1; padding:14px 13px 10px; overflow:hidden; display:flex; flex-direction:column; min-height:0; }
+#pName { font-size:9px; color:#fff; letter-spacing:1px; margin-bottom:12px; }
+.barWrap { margin-bottom:8px; }
+.barLbl { font-size:6px; color:#555; margin-bottom:3px; display:flex; gap:6px; align-items:center; }
+.barLbl span { color:#c8a86c; }
+.barTrack { height:7px; background:#0c0c0c; border:1px solid #1c1c1c; }
+.barFill  { height:100%; transition:width .5s ease; }
+.bHp  { background:#bb2020; }
+.bExp { background:#1850cc; }
+.divider { border:none; border-top:1px solid #160c00; margin:7px 0; }
+.sRow { display:flex; justify-content:space-between; align-items:center; font-size:7px; margin-bottom:7px; }
+.sKey { color:#706050; }
+.sVal { color:#c8a86c; }
+.sNew { color:#33ee33; font-size:6px; margin-left:4px; }
+.battleLbl { font-size:6px; color:#706050; margin-bottom:4px; }
+.battleVal { font-size:9px; color:#ffcc22; }
+
+/* ADD QUEST BUTTON */
+#addQuestBtn {
+  margin:0 13px 10px;
+  padding:9px 8px;
+  background:#0e0820;
+  border:1px solid #3a2880;
+  color:#8877dd;
+  font-size:7px; cursor:pointer;
+  letter-spacing:1px;
+  transition:background .15s, color .15s;
+  flex-shrink:0;
+}
+#addQuestBtn:hover { background:#1a1035; color:#aaa0ff; }
+
+/* MENU */
+#menuSection { border-top:2px solid #1e0e00; border-bottom:2px solid #1e0e00; flex-shrink:0; }
+.menuHeader { font-size:6px; color:#3a3020; letter-spacing:2px; padding:7px 13px 5px; }
+.mBtn { display:flex; align-items:center; gap:9px; width:100%; padding:9px 13px; background:none; border:none; border-left:3px solid transparent; color:#5a4a38; font-size:7px; cursor:pointer; text-align:left; transition:color .15s, background .15s, border-left-color .15s; }
+.mBtn:hover  { background:#0e0804; color:#c8a86c; border-left-color:#5a3010; }
+.mBtn.active { background:#140a02; color:#ffcc44; border-left-color:#cc8820; }
+.mBtn .mIcon { font-size:12px; }
+
+/* INVENTORY */
+#invPanel { padding:9px 13px 12px; background:#020202; flex-shrink:0; }
+.invTitle { font-size:6px; color:#3a3a3a; letter-spacing:2px; margin-bottom:7px; }
+#invGrid  { display:grid; grid-template-columns:repeat(5,1fr); gap:3px; }
+.iSlot    { aspect-ratio:1; background:#0a0a0a; border:1px solid #1a1a1a; display:flex; align-items:center; justify-content:center; font-size:15px; cursor:pointer; position:relative; transition:border-color .15s; }
+.iSlot:hover    { border-color:#664400; }
+.iSlot.has-item { border-color:#2a1800; }
+.iCount { position:absolute; bottom:1px; right:2px; font-size:5px; color:#888; }
+
+/* CONSOLE */
+#console { height:120px; min-height:120px; background:#02020c; border-top:2px solid #08082a; padding:9px 15px; overflow-y:auto; flex-shrink:0; }
+#console::-webkit-scrollbar { width:3px; }
+#console::-webkit-scrollbar-thumb { background:#1a1a2a; }
+.cLine { font-size:7px; line-height:2; color:#9a8855; white-space:pre-wrap; }
+.cLine.red    { color:#ff3333; }
+.cLine.green  { color:#33cc33; }
+.cLine.blue   { color:#4499ff; }
+.cLine.yellow { color:#ffcc00; }
+.cLine.white  { color:#cccccc; }
+.cLine.dim    { color:#444433; }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="top">
+
+    <!-- MAP -->
+    <div id="mapWrap">
+      <canvas id="gameCanvas"></canvas>
+      <!-- Overlay Panel -->
+      <div id="panel">
+        <div id="panelHeader">
+          <span id="panelTitle"></span>
+          <button id="panelClose">[ X ]</button>
+        </div>
+        <div id="panelBody"></div>
+      </div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+
+      <!-- STATS -->
+      <div id="statsPanel">
+        <div id="pName">유성</div>
+        <div class="barWrap">
+          <div class="barLbl">HP &nbsp;<span id="hpTxt">100 / 100</span></div>
+          <div class="barTrack"><div class="barFill bHp" id="hpBar" style="width:100%"></div></div>
+        </div>
+        <div class="barWrap">
+          <div class="barLbl">EXP &nbsp;<span id="expTxt">0 / 100</span></div>
+          <div class="barTrack"><div class="barFill bExp" id="expBar" style="width:0%"></div></div>
+        </div>
+        <hr class="divider">
+        <div class="sRow"><span class="sKey">level</span><span class="sVal" id="sLv">1</span></div>
+        <div class="sRow"><span class="sKey">body</span><span><span class="sVal" id="sBody">0</span><span class="sNew" id="sBodyN"></span></span></div>
+        <div class="sRow"><span class="sKey">mentality</span><span><span class="sVal" id="sMent">0</span><span class="sNew" id="sMentN"></span></span></div>
+        <div class="sRow"><span class="sKey">ability</span><span><span class="sVal" id="sAbl">0</span><span class="sNew" id="sAblN"></span></span></div>
+        <div class="sRow"><span class="sKey">focus</span><span><span class="sVal" id="sFoc">0</span><span class="sNew" id="sFocN"></span></span></div>
+        <div class="sRow"><span class="sKey">quest lv</span><span class="sVal" id="sQlv">0</span></div>
+        <hr class="divider">
+        <div class="battleLbl">Comprehensive Battle Index</div>
+        <div class="battleVal" id="sBattle">: 0</div>
+      </div>
+
+      <!-- + 퀘스트 기록 버튼 -->
+      <button id="addQuestBtn">⚔ + 퀘스트 기록</button>
+
+      <!-- MENU -->
+      <div id="menuSection">
+        <div class="menuHeader">MENU</div>
+        <button class="mBtn" data-panel="journal"> <span class="mIcon">📖</span> 모험 일지</button>
+        <button class="mBtn" data-panel="bestiary"><span class="mIcon">🐉</span> 도감</button>
+        <button class="mBtn" data-panel="schedule"><span class="mIcon">📅</span> 스케줄</button>
+        <button class="mBtn" data-panel="memo">    <span class="mIcon">📝</span> 메모</button>
+      </div>
+
+      <!-- INVENTORY -->
+      <div id="invPanel">
+        <div class="invTitle">INVENTORY</div>
+        <div id="invGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONSOLE -->
+  <div id="console"></div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     QUEST MODAL
+════════════════════════════════════════════ -->
+<div id="questModal">
+  <div id="questDialog">
+    <div id="questDialogHeader">
+      <span>⚔️ 퀘스트 기록</span>
+      <button id="questDialogClose">[ X ]</button>
+    </div>
+    <div id="questDialogBody">
+      <div class="qRow">
+        <label class="qLabel">활동명 *</label>
+        <input class="qInput" id="qName" type="text" placeholder="오늘 한 일을 입력하세요">
+      </div>
+      <div class="qRow">
+        <label class="qLabel">카테고리 *</label>
+        <select class="qSelect" id="qCat">
+          <option>💪 운동/체력</option>
+          <option>📚 학습/공부</option>
+          <option>🔄 습관/루틴</option>
+          <option>⚙️ 작업/프로젝트</option>
+        </select>
+      </div>
+      <div class="qRow">
+        <label class="qLabel">상세 내용 (AI 판정 정확도 향상)</label>
+        <textarea class="qTextarea" id="qDesc" placeholder="구체적으로 적을수록 AI가 정확하게 판정합니다&#10;예: 사회탐구 3단원 개념 정리 + 문제풀이 50문항"></textarea>
+      </div>
+      <div class="qRow inline">
+        <label class="qLabel" style="white-space:nowrap;margin:0">소요 시간</label>
+        <input class="qInput" id="qDur" type="number" min="1" max="999" placeholder="0">
+        <span>분</span>
+      </div>
+      <!-- AI Result -->
+      <div id="aiResultBox">
+        <div class="aiResultTitle">🤖 AI 판정 결과</div>
+        <div class="aiResultGrid">
+          <div class="aiItem"><div class="aiItemKey">등급</div><div class="aiItemVal" id="aiGrade">—</div></div>
+          <div class="aiItem"><div class="aiItemKey">획득 경험치</div><div class="aiItemVal" id="aiXp">— XP</div></div>
+          <div class="aiItem"><div class="aiItemKey">처치 몬스터</div><div class="aiItemVal" id="aiMonster">—</div></div>
+          <div class="aiItem"><div class="aiItemKey">스탯 보너스</div><div class="aiItemVal" id="aiStat">—</div></div>
+        </div>
+        <div class="aiAnalysis" id="aiAnalysis"></div>
+      </div>
+    </div>
+    <div id="questDialogFooter">
+      <button class="qBtn qBtnAnalyze" id="analyzeBtn">🤖 AI 판정</button>
+      <button class="qBtn qBtnSave"    id="saveBtn" disabled>✅ 저장하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════
+     LEVEL UP BANNER
+════════════════════════════════════════════ -->
+<div id="levelUpBanner">
+  <div class="luTitle">LEVEL UP!</div>
+  <div class="luSub" id="luText">Lv.1 → Lv.2</div>
+  <button class="luClose" id="luClose">[ 계속하기 ]</button>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  ⚠️  SUPABASE 설정  —  아래 두 값을 채워주세요
+//  Supabase 프로젝트 → Settings → API 에서 복사
+// ═══════════════════════════════════════════════════════
+const SUPABASE_URL      = 'https://zsxeqiajempbfszxywav.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpzeGVxaWFqZW1wYmZzenh5d2F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNzA1NjcsImV4cCI6MjA5MTc0NjU2N30.7gmVzOzlC2piFTyEXBR6KcMJ9UwbOQEp8eieL82fHr8';
+
+// ═══════════════════════════════════════════════════════
+//  Supabase 클라이언트 초기화
+// ═══════════════════════════════════════════════════════
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// 캐릭터 상태 (Supabase에서 로드)
+let CHAR = {
+  id: null, name:'유성', level:1, exp:0, total_exp:0, next_exp:100,
+  hp:100, max_hp:100, body:0, mentality:0, ability:0, focus:0,
+  quests_completed:0, class:'견습 모험가',
+  inventory:[
+    { icon:'🗡️', name:'낡은 단검', count:1 },
+    { icon:'🧪', name:'회복 포션', count:3 },
+    { icon:'🍞', name:'빵',       count:2 },
+    null, null, null, null, null, null, null,
+  ]
+};
+
+// 판정 결과 임시 저장
+let pendingAnalysis = null;
+
+// ═══════════════════════════════════════════════════════
+//  Supabase — 데이터 로드
+// ═══════════════════════════════════════════════════════
+async function loadCharacter() {
+  try {
+    const { data, error } = await sb.from('characters').select('*').limit(1).maybeSingle();
+    if (error) throw error;
+    if (data) {
+      Object.assign(CHAR, {
+        id: data.id, name: data.name, level: data.level,
+        exp: data.exp, total_exp: data.total_exp, next_exp: data.next_exp,
+        hp: data.hp, max_hp: data.max_hp,
+        body: data.body, mentality: data.mentality,
+        ability: data.ability, focus: data.focus,
+        quests_completed: data.quests_completed, class: data.class,
+      });
+      updateStats();
+      log(`[${CHAR.name}] Lv.${CHAR.level} — 데이터 로드 완료.`, 'green');
+    } else {
+      log('캐릭터가 없습니다. schema.sql을 Supabase에서 실행하세요.', 'red');
+    }
+  } catch (e) {
+    log('Supabase 연결 실패. SETUP.md를 확인하세요.', 'red');
+    log(String(e), 'dim');
+  }
+}
+
+async function loadQuests() {
+  if (!CHAR.id) return [];
+  const { data } = await sb.from('quests').select('*')
+    .eq('character_id', CHAR.id)
+    .order('quest_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(30);
+  return data || [];
+}
+
+async function loadMonsters() {
+  if (!CHAR.id) return [];
+  const { data } = await sb.from('monsters').select('*')
+    .eq('character_id', CHAR.id)
+    .order('defeat_count', { ascending: false });
+  return data || [];
+}
+
+async function loadScheduleTasks(date) {
+  if (!CHAR.id) return [];
+  const { data } = await sb.from('schedule_tasks').select('*')
+    .eq('character_id', CHAR.id)
+    .eq('scheduled_date', date)
+    .order('scheduled_time');
+  return data || [];
+}
+
+async function loadMemos() {
+  if (!CHAR.id) return [];
+  const { data } = await sb.from('memos').select('*')
+    .eq('character_id', CHAR.id)
+    .order('updated_at', { ascending: false });
+  return data || [];
+}
+
+// ═══════════════════════════════════════════════════════
+//  AI 판정 (Edge Function 호출)
+// ═══════════════════════════════════════════════════════
+async function analyzeQuest(questData) {
+  const { data, error } = await sb.functions.invoke('analyze-quest', { body: questData });
+  if (error) throw error;
+  return data;
+}
+
+// ═══════════════════════════════════════════════════════
+//  퀘스트 저장 + 캐릭터 업데이트
+// ═══════════════════════════════════════════════════════
+const STAT_MAP = {
+  'body':'운동/체력', 'mentality':'학습/지식', 'ability':'습관/의지', 'focus':'작업/집중',
+  '💪 운동/체력':'body', '📚 학습/공부':'mentality', '🔄 습관/루틴':'ability', '⚙️ 작업/프로젝트':'focus',
+};
+const STAT_KO = { body:'body', mentality:'mentality', ability:'ability', focus:'focus' };
+
+async function saveQuest(formData, analysis) {
+  const statKey = analysis.stat_boost || STAT_MAP[formData.category] || 'body';
+
+  // 1. 퀘스트 저장
+  await sb.from('quests').insert({
+    character_id: CHAR.id,
+    name: formData.name, category: formData.category,
+    description: formData.description, duration_min: formData.duration_min,
+    grade: analysis.grade, monster_name: analysis.monster_name,
+    xp_gained: analysis.xp, ai_analysis: analysis.analysis,
+    completed: true, quest_date: new Date().toISOString().slice(0,10),
+  });
+
+  // 2. 몬스터 도감 upsert
+  const { data: existing } = await sb.from('monsters')
+    .select('id, defeat_count').eq('character_id', CHAR.id)
+    .eq('name', analysis.monster_name).maybeSingle();
+
+  if (existing) {
+    await sb.from('monsters').update({ defeat_count: existing.defeat_count + 1, last_defeated: new Date().toISOString().slice(0,10) })
+      .eq('id', existing.id);
+  } else {
+    await sb.from('monsters').insert({
+      character_id: CHAR.id, name: analysis.monster_name,
+      icon: analysis.monster_icon || '👾', grade: analysis.grade,
+      base_xp: analysis.xp,
+      category: formData.category, defeat_count: 1,
+    });
+  }
+
+  // 3. 캐릭터 스탯 업데이트
+  const newExp   = CHAR.exp + analysis.xp;
+  const newTotal = CHAR.total_exp + analysis.xp;
+  let newLevel   = CHAR.level;
+  let newNextExp = CHAR.next_exp;
+  let curExp     = newExp;
+  let leveled    = false;
+
+  while (curExp >= newNextExp) {
+    curExp    -= newNextExp;
+    newLevel  += 1;
+    newNextExp = newLevel * 100;
+    leveled    = true;
+  }
+
+  const statUpdate = {
+    exp: curExp, total_exp: newTotal, level: newLevel, next_exp: newNextExp,
+    quests_completed: CHAR.quests_completed + 1,
+    [statKey]: (CHAR[statKey] || 0) + 1,
+  };
+  if (leveled) { statUpdate.max_hp = CHAR.max_hp + 20; statUpdate.hp = statUpdate.max_hp; }
+
+  await sb.from('characters').update(statUpdate).eq('id', CHAR.id);
+
+  // 4. 로컬 상태 반영
+  const prevLevel = CHAR.level;
+  Object.assign(CHAR, statUpdate);
+  updateStats();
+
+  // 5. 이전 스탯 NEW 표시
+  showNew('s' + statKey.charAt(0).toUpperCase() + statKey.slice(1) + 'N', '+1');
+
+  log(`⚔ ${analysis.monster_name} 처치!  ${analysis.grade}등급  +${analysis.xp} XP`, 'yellow');
+  log(analysis.analysis || '', 'dim');
+
+  if (leveled) showLevelUp(prevLevel, CHAR.level);
+}
+
+// ═══════════════════════════════════════════════════════
+//  QUEST MODAL
+// ═══════════════════════════════════════════════════════
+const modal = document.getElementById('questModal');
+
+function openQuestModal() {
+  document.getElementById('qName').value    = '';
+  document.getElementById('qDesc').value    = '';
+  document.getElementById('qDur').value     = '';
+  document.getElementById('aiResultBox').classList.remove('show');
+  document.getElementById('saveBtn').disabled = true;
+  pendingAnalysis = null;
+  modal.classList.add('open');
+  document.getElementById('qName').focus();
+}
+
+function closeQuestModal() { modal.classList.remove('open'); }
+
+document.getElementById('addQuestBtn').addEventListener('click', openQuestModal);
+document.getElementById('questDialogClose').addEventListener('click', closeQuestModal);
+modal.addEventListener('click', e => { if (e.target === modal) closeQuestModal(); });
+
+document.getElementById('analyzeBtn').addEventListener('click', async () => {
+  const name = document.getElementById('qName').value.trim();
+  const cat  = document.getElementById('qCat').value;
+  if (!name) { log('활동명을 입력해주세요.', 'red'); return; }
+
+  const btn = document.getElementById('analyzeBtn');
+  btn.textContent = '판정 중...'; btn.disabled = true;
+
+  try {
+    const result = await analyzeQuest({
+      name, category: cat,
+      description: document.getElementById('qDesc').value.trim(),
+      duration_min: parseInt(document.getElementById('qDur').value) || null,
+    });
+
+    pendingAnalysis = result;
+
+    document.getElementById('aiGrade').textContent    = result.grade + '등급';
+    document.getElementById('aiGrade').className      = 'aiItemVal grade-' + result.grade;
+    document.getElementById('aiXp').textContent       = '+' + result.xp + ' XP';
+    document.getElementById('aiMonster').textContent  = (result.monster_icon || '') + ' ' + result.monster_name;
+    document.getElementById('aiStat').textContent     = result.stat_boost + ' +1';
+    document.getElementById('aiAnalysis').textContent = result.analysis;
+    document.getElementById('aiResultBox').classList.add('show');
+    document.getElementById('saveBtn').disabled = false;
+    log(`AI 판정: ${result.monster_name} [${result.grade}] +${result.xp}XP`, 'blue');
+  } catch (e) {
+    log('AI 판정 실패: ' + String(e), 'red');
+  } finally {
+    btn.textContent = '🤖 AI 판정'; btn.disabled = false;
+  }
+});
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  if (!pendingAnalysis || !CHAR.id) return;
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = '저장 중...'; btn.disabled = true;
+  try {
+    await saveQuest({
+      name: document.getElementById('qName').value.trim(),
+      category: document.getElementById('qCat').value,
+      description: document.getElementById('qDesc').value.trim(),
+      duration_min: parseInt(document.getElementById('qDur').value) || null,
+    }, pendingAnalysis);
+    closeQuestModal();
+    if (currentPanel === 'journal')  buildJournal();
+    if (currentPanel === 'bestiary') buildBestiary();
+  } catch (e) {
+    log('저장 실패: ' + String(e), 'red');
+    btn.textContent = '✅ 저장하기'; btn.disabled = false;
+  }
+});
+
+// ═══════════════════════════════════════════════════════
+//  LEVEL UP
+// ═══════════════════════════════════════════════════════
+const lvBanner = document.getElementById('levelUpBanner');
+document.getElementById('luClose').addEventListener('click', () => lvBanner.classList.remove('show'));
+
+function showLevelUp(prev, next) {
+  document.getElementById('luText').textContent = `Lv.${prev}  →  Lv.${next}`;
+  lvBanner.classList.add('show');
+  log(`🎉 LEVEL UP!  Lv.${prev} → Lv.${next}  MAX HP +20`, 'yellow');
+}
+
+function showNew(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
+// ═══════════════════════════════════════════════════════
+//  PANEL SYSTEM
+// ═══════════════════════════════════════════════════════
+const panelEl   = document.getElementById('panel');
+const panelBody = document.getElementById('panelBody');
+const panelTitle= document.getElementById('panelTitle');
+const menuBtns  = document.querySelectorAll('.mBtn');
+let currentPanel = null;
+
+async function openPanel(type) {
+  if (currentPanel === type) { closePanel(); return; }
+  currentPanel = type;
+  menuBtns.forEach(b => b.classList.toggle('active', b.dataset.panel === type));
+  panelTitle.textContent = { journal:'📖 모험 일지', bestiary:'🐉 도감', schedule:'📅 스케줄', memo:'📝 메모' }[type];
+  panelBody.innerHTML = '<div class="loadingText">Loading...</div>';
+  panelEl.classList.add('open');
+  const builders = { journal:buildJournal, bestiary:buildBestiary, schedule:buildSchedule, memo:buildMemo };
+  await builders[type]();
+}
+
+function closePanel() {
+  currentPanel = null;
+  panelEl.classList.remove('open');
+  menuBtns.forEach(b => b.classList.remove('active'));
+}
+
+document.getElementById('panelClose').addEventListener('click', closePanel);
+menuBtns.forEach(b => b.addEventListener('click', () => openPanel(b.dataset.panel)));
+
+/* ── 모험 일지 ── */
+async function buildJournal() {
+  panelBody.innerHTML = '';
+  const quests = await loadQuests();
+  if (!quests.length) {
+    panelBody.innerHTML = '<div style="font-size:7px;color:#3a2a1a;padding:30px 0;text-align:center">아직 기록된 퀘스트가 없습니다.<br><br>⚔ 퀘스트 기록 버튼으로 첫 모험을 시작하세요!</div>';
+    return;
+  }
+  // 날짜별 그룹
+  const byDate = {};
+  quests.forEach(q => { (byDate[q.quest_date] = byDate[q.quest_date] || []).push(q); });
+  Object.entries(byDate).forEach(([date, entries]) => {
+    const d = document.createElement('div'); d.className='jDate';
+    d.textContent = '━━ ' + date + ' ━━━━━━━━━━━━━━━━';
+    panelBody.appendChild(d);
+    entries.forEach(e => {
+      const catIcons = { '💪 운동/체력':'💪', '📚 학습/공부':'📚', '🔄 습관/루틴':'🔄', '⚙️ 작업/프로젝트':'⚙️' };
+      const row = document.createElement('div'); row.className='jEntry';
+      row.innerHTML = `
+        <div class="jCatIcon">${catIcons[e.category]||'⚔'}</div>
+        <div class="jInfo">
+          <div class="jName">${e.name}</div>
+          <div class="jMonster">[ ${e.monster_name||'—'} ]</div>
+        </div>
+        <div class="jRight">
+          <span class="jGrade grade-${e.grade||'E'}">${e.grade||'E'}</span>
+          <span class="jXp">+${e.xp_gained||0} XP</span>
+        </div>`;
+      panelBody.appendChild(row);
+    });
+  });
+}
+
+/* ── 도감 ── */
+async function buildBestiary() {
+  panelBody.innerHTML = '';
+  const monsters = await loadMonsters();
+  if (!monsters.length) {
+    panelBody.innerHTML = '<div style="font-size:7px;color:#3a2a1a;padding:30px 0;text-align:center">아직 처치한 몬스터가 없습니다.</div>';
+    return;
+  }
+  const grid = document.createElement('div'); grid.className='bGrid';
+  monsters.forEach(m => {
+    const card = document.createElement('div'); card.className='bCard';
+    card.innerHTML = `
+      <div class="bCardTop">
+        <div class="bIcon">${m.icon||'👾'}</div>
+        <div><div class="bName">${m.name}</div><div class="bCat">${m.category||''}</div></div>
+      </div>
+      <div class="bStats">
+        <span class="bStat grade-${m.grade||'E'}">${m.grade||'E'}등급</span>
+        <span class="bStat">처치 <span>${m.defeat_count}회</span></span>
+        <span class="bStat"><span style="color:#4499ff">${m.base_xp||0} XP</span></span>
+      </div>`;
+    grid.appendChild(card);
+  });
+  panelBody.appendChild(grid);
+}
+
+/* ── 스케줄 ── */
+async function buildSchedule() {
+  panelBody.innerHTML = '';
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0,10);
+
+  // 주간 달력
+  const week = document.createElement('div'); week.className='sWeek';
+  const days = ['월','화','수','목','금','토','일'];
+  const todayDow = (today.getDay()+6)%7;
+  for (let i=0;i<7;i++) {
+    const d=new Date(today); d.setDate(today.getDate()-todayDow+i);
+    const cell=document.createElement('div');
+    cell.className='sDay'+(i===todayDow?' today':'');
+    cell.innerHTML=`<div class="sDayName">${days[i]}</div><div class="sDayNum">${d.getDate()}</div><div class="sDayDot">${i===todayDow?'●':''}</div>`;
+    week.appendChild(cell);
+  }
+  panelBody.appendChild(week);
+
+  const sec=document.createElement('div'); sec.className='sSection'; sec.textContent='오늘의 퀘스트';
+  panelBody.appendChild(sec);
+
+  const tasks = await loadScheduleTasks(todayStr);
+  if (!tasks.length) {
+    const empty=document.createElement('div');
+    empty.style.cssText='font-size:7px;color:#3a2a1a;padding:12px 0;text-align:center';
+    empty.textContent='오늘 예정된 퀘스트가 없습니다.';
+    panelBody.appendChild(empty);
+  } else {
+    tasks.forEach(t => {
+      const row=document.createElement('div'); row.className='sTask';
+      row.innerHTML=`
+        <div class="sCheck">${t.completed?'✅':'☐'}</div>
+        <div class="sTaskName" style="${t.completed?'opacity:.4;text-decoration:line-through':''}">${t.name}</div>
+        <div style="text-align:right;flex-shrink:0">
+          <div class="sTaskTime">${t.scheduled_time||''}</div>
+          <div class="sTaskXp">${t.expected_grade||''} +${t.expected_xp||'?'}</div>
+        </div>`;
+      row.addEventListener('click', async () => {
+        await sb.from('schedule_tasks').update({ completed: !t.completed }).eq('id', t.id);
+        buildSchedule();
+        if (!t.completed) log(`스케줄 완료: ${t.name}`, 'green');
+      });
+      panelBody.appendChild(row);
+    });
+  }
+
+  const addBtn=document.createElement('button'); addBtn.className='panelAddBtn';
+  addBtn.textContent='+ 새 스케줄 추가 (준비 중)';
+  panelBody.appendChild(addBtn);
+}
+
+/* ── 메모 ── */
+async function buildMemo() {
+  panelBody.innerHTML = '';
+  const addBtn=document.createElement('button'); addBtn.className='panelAddBtn';
+  addBtn.textContent='+ 새 메모 작성 (준비 중)';
+  panelBody.appendChild(addBtn);
+
+  const memos = await loadMemos();
+  if (!memos.length) {
+    const empty=document.createElement('div');
+    empty.style.cssText='font-size:7px;color:#3a2a1a;padding:20px 0;text-align:center';
+    empty.textContent='아직 작성된 메모가 없습니다.';
+    panelBody.appendChild(empty);
+    return;
+  }
+  memos.forEach(m => {
+    const card=document.createElement('div'); card.className='mCard';
+    const date=m.updated_at ? m.updated_at.slice(5,10) : '';
+    card.innerHTML=`
+      <div class="mCardHeader"><div class="mCardTitle">${m.title}</div><div class="mCardDate">${date}</div></div>
+      <div class="mCardBody">${m.body||''}</div>
+      ${m.tag?`<div class="mCardTag">${m.tag}</div>`:''}`;
+    panelBody.appendChild(card);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAP + CANVAS
+// ═══════════════════════════════════════════════════════
+const MAP = [
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,1,1,1,0,0,0,1,1,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+const MAP_W=MAP[0].length, MAP_H=MAP.length, TILE=44;
+
+const canvas=document.getElementById('gameCanvas');
+const ctx=canvas.getContext('2d');
+const mapWrap=document.getElementById('mapWrap');
+function resize(){ canvas.width=mapWrap.clientWidth; canvas.height=mapWrap.clientHeight; }
+resize(); window.addEventListener('resize',resize);
+
+function makeTile(fn){ const c=document.createElement('canvas'); c.width=TILE; c.height=TILE; fn(c.getContext('2d')); return c; }
+
+const FLOORS=[0,1,2,3].map(v=>makeTile(g=>{
+  g.fillStyle=['#2d1c0e','#291a0b','#311d0f','#261708'][v]; g.fillRect(0,0,TILE,TILE);
+  g.strokeStyle='rgba(0,0,0,0.25)'; g.lineWidth=.5; g.strokeRect(0,0,TILE,TILE);
+  g.fillStyle='rgba(0,0,0,0.12)';
+  [[4,7],[11,3],[22,14],[7,20],[19,9],[31,19],[26,5],[8,29],[14,24]].filter((_,i)=>(i+v)%4<2).forEach(([x,y])=>{ if(x<TILE&&y<TILE) g.fillRect(x,y,2,2); });
+}));
+
+const WALL=makeTile(g=>{
+  g.fillStyle='#1a0c06'; g.fillRect(0,0,TILE,TILE);
+  g.strokeStyle='#7a4020'; g.lineWidth=2.5; g.strokeRect(1.5,1.5,TILE-3,TILE-3);
+  g.strokeStyle='#3a1a08'; g.lineWidth=1;   g.strokeRect(5,5,TILE-10,TILE-10);
+  const cx=TILE/2,cy=TILE/2,R=TILE*.265;
+  const gw=g.createRadialGradient(cx,cy,0,cx,cy,R+6);
+  gw.addColorStop(0,'rgba(200,70,0,.22)'); gw.addColorStop(1,'rgba(200,70,0,0)');
+  g.fillStyle=gw; g.beginPath(); g.arc(cx,cy,R+8,0,Math.PI*2); g.fill();
+  g.beginPath(); g.arc(cx,cy,R+1.5,0,Math.PI*2); g.fillStyle='#3a1000'; g.fill();
+  g.beginPath(); g.arc(cx,cy,R,0,Math.PI*2); g.fillStyle='#8a2200'; g.fill();
+  g.strokeStyle='#dd5500'; g.lineWidth=1.5; g.stroke();
+  g.beginPath(); g.arc(cx,cy,R*.62,0,Math.PI*2); g.strokeStyle='#bb3300'; g.lineWidth=1; g.stroke();
+  g.strokeStyle='rgba(30,8,0,.9)'; g.lineWidth=2;
+  g.beginPath(); g.moveTo(cx,cy-R*.9); g.lineTo(cx,cy+R*.9); g.stroke();
+  g.beginPath(); g.moveTo(cx-R*.9,cy); g.lineTo(cx+R*.9,cy); g.stroke();
+  g.lineWidth=1; g.strokeStyle='rgba(30,8,0,.45)';
+  const d=R*.68;
+  g.beginPath(); g.moveTo(cx-d*.72,cy-d*.72); g.lineTo(cx+d*.72,cy+d*.72); g.stroke();
+  g.beginPath(); g.moveTo(cx+d*.72,cy-d*.72); g.lineTo(cx-d*.72,cy+d*.72); g.stroke();
+  [[3,3],[TILE-4,3],[3,TILE-4],[TILE-4,TILE-4]].forEach(([sx,sy])=>{ g.beginPath(); g.arc(sx,sy,2,0,Math.PI*2); g.fillStyle='#aa4400'; g.fill(); });
+});
+
+function drawChar(ctx,cx,cy,animF,moving){
+  const S=3,bob=(moving&&Math.floor(animF/4)%2===0)?-S:0,top=cy-13*S+bob;
+  const px=(x,y,c)=>{ ctx.fillStyle=c; ctx.fillRect(Math.round(cx-4*S+x*S),Math.round(top+y*S),S,S); };
+  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(cx,cy+3,S*3.5,S*.9,0,0,Math.PI*2); ctx.fill();
+  const H='#1d1238',H2='#271844';
+  [[2,0],[3,0],[4,0],[5,0]].forEach(([x,y])=>px(x,y,H));
+  [[1,1],[2,1],[3,1],[4,1],[5,1],[6,1]].forEach(([x,y])=>px(x,y,H2));
+  px(0,2,H); px(6,2,H);
+  const SK='#d49060';
+  [[1,2],[2,2],[3,2],[4,2],[5,2],[1,3],[2,3],[3,3],[4,3],[5,3],[1,4],[2,4],[3,4],[4,4],[5,4]].forEach(([x,y])=>px(x,y,SK));
+  px(2,3,'#1a0800'); px(5,3,'#1a0800'); px(3,4,'#a06040'); px(4,4,'#a06040');
+  const R1='#4a38a8',R2='#3a2888',R3='#261860';
+  [[0,5],[1,5],[2,5],[3,5],[4,5],[5,5],[6,5]].forEach(([x,y])=>px(x,y,x===0||x===6?R3:R1));
+  [[0,6],[1,6],[2,6],[3,6],[4,6],[5,6],[6,6]].forEach(([x,y])=>px(x,y,x===0||x===6?R3:R2));
+  [[0,7],[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]].forEach(([x,y])=>px(x,y,x===0||x===6?R3:R2));
+  [[1,8],[2,8],[3,8],[4,8],[5,8]].forEach(([x,y])=>px(x,y,'#9a7228')); px(3,8,'#ccaa44');
+  [[0,9],[1,9],[2,9],[3,9],[4,9],[5,9],[6,9]].forEach(([x,y])=>px(x,y,x===0||x===6?'#1c1050':R3));
+  [[1,10],[2,10],[3,10],[4,10],[5,10]].forEach(([x,y])=>px(x,y,'#1c1050'));
+  const step=Math.floor(animF/5)%2; ctx.fillStyle='#111122';
+  if(!moving||step===0){ ctx.fillRect(Math.round(cx-4*S+2*S),Math.round(top+11*S),S,S*2); ctx.fillRect(Math.round(cx-4*S+4*S),Math.round(top+11*S),S,S*2); }
+  else { ctx.fillRect(Math.round(cx-4*S+1*S),Math.round(top+11*S),S,S*2); ctx.fillRect(Math.round(cx-4*S+5*S),Math.round(top+11*S),S,S*2); }
+  for(let i=1;i<9;i++) px(7,i+2,i===3?'#ccaa22':'#6a3a10');
+  ctx.fillStyle='#88aaff'; ctx.fillRect(Math.round(cx-4*S+7*S),Math.round(top+1*S),S,S); ctx.fillRect(Math.round(cx-4*S+8*S),Math.round(top+2*S),S,S);
+  ctx.fillStyle='#ccddff'; ctx.fillRect(Math.round(cx-4*S+7*S),Math.round(top),S,S);
+}
+
+const pl={tx:7,ty:7,px:7*TILE,py:7*TILE,moving:false,animF:0};
+const cam={x:0,y:0};
+
+document.addEventListener('keydown',e=>{
+  if(document.getElementById('questModal').classList.contains('open')) return;
+  if(currentPanel&&e.key==='Escape'){ closePanel(); return; }
+  if(currentPanel) return;
+  const dir={ArrowUp:'u',ArrowDown:'d',ArrowLeft:'l',ArrowRight:'r',w:'u',s:'d',a:'l',d:'r',W:'u',S:'d',A:'l',D:'r'}[e.key];
+  if(!dir||pl.moving) return;
+  const dx=dir==='l'?-1:dir==='r'?1:0, dy=dir==='u'?-1:dir==='d'?1:0;
+  const nx=pl.tx+dx, ny=pl.ty+dy;
+  if(nx>=0&&nx<MAP_W&&ny>=0&&ny<MAP_H&&MAP[ny][nx]===0){ pl.tx=nx; pl.ty=ny; pl.moving=true; }
+});
+
+let lastTs=0,animTimer=0;
+requestAnimationFrame(function loop(ts){
+  const dt=ts-lastTs; lastTs=ts;
+  animTimer+=dt; if(animTimer>90){ pl.animF=(pl.animF+1)%24; animTimer=0; }
+  if(pl.moving){
+    const tx=pl.tx*TILE,ty=pl.ty*TILE,dx=tx-pl.px,dy=ty-pl.py,dist=Math.sqrt(dx*dx+dy*dy),SP=5;
+    if(dist<SP*1.5){ pl.px=tx; pl.py=ty; pl.moving=false; }
+    else{ pl.px+=dx/dist*SP; pl.py+=dy/dist*SP; }
+  }
+  const tcx=pl.px-canvas.width/2+TILE/2, tcy=pl.py-canvas.height/2+TILE/2;
+  cam.x+=(tcx-cam.x)*.14; cam.y+=(tcy-cam.y)*.14;
+  cam.x=Math.max(0,Math.min(cam.x,MAP_W*TILE-canvas.width));
+  cam.y=Math.max(0,Math.min(cam.y,MAP_H*TILE-canvas.height));
+  render(); requestAnimationFrame(loop);
+});
+
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  const x0=Math.floor(cam.x/TILE),y0=Math.floor(cam.y/TILE),x1=Math.ceil((cam.x+canvas.width)/TILE),y1=Math.ceil((cam.y+canvas.height)/TILE);
+  for(let ty=y0;ty<=y1;ty++) for(let tx=x0;tx<=x1;tx++){
+    if(ty<0||ty>=MAP_H||tx<0||tx>=MAP_W) continue;
+    const sx=Math.round(tx*TILE-cam.x),sy=Math.round(ty*TILE-cam.y);
+    MAP[ty][tx]===1?ctx.drawImage(WALL,sx,sy):ctx.drawImage(FLOORS[(tx*3+ty*7)%4],sx,sy);
+  }
+  const csx=Math.round(pl.px-cam.x+TILE/2),csy=Math.round(pl.py-cam.y+TILE/2);
+  drawChar(ctx,csx,csy,pl.animF,pl.moving);
+  const LR=TILE*5;
+  const dark=ctx.createRadialGradient(csx,csy,0,csx,csy,LR);
+  dark.addColorStop(0,'rgba(0,0,0,0)'); dark.addColorStop(.42,'rgba(0,0,0,0)');
+  dark.addColorStop(.72,'rgba(0,0,0,.62)'); dark.addColorStop(1,'rgba(0,0,0,.97)');
+  ctx.fillStyle=dark; ctx.fillRect(0,0,canvas.width,canvas.height);
+  const warm=ctx.createRadialGradient(csx,csy,0,csx,csy,LR*.5);
+  warm.addColorStop(0,'rgba(255,140,30,.07)'); warm.addColorStop(1,'rgba(255,140,30,0)');
+  ctx.fillStyle=warm; ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+// ═══════════════════════════════════════════════════════
+//  STATS & INVENTORY UI
+// ═══════════════════════════════════════════════════════
+function updateStats(c=CHAR){
+  document.getElementById('pName').textContent  = c.name;
+  document.getElementById('hpTxt').textContent  = `${c.hp} / ${c.max_hp}`;
+  document.getElementById('hpBar').style.width  = `${c.hp/c.max_hp*100}%`;
+  document.getElementById('expTxt').textContent = `${c.exp} / ${c.next_exp}`;
+  document.getElementById('expBar').style.width = `${Math.min(c.exp/c.next_exp*100,100)}%`;
+  document.getElementById('sLv').textContent    = c.level;
+  document.getElementById('sBody').textContent  = c.body;
+  document.getElementById('sMent').textContent  = c.mentality;
+  document.getElementById('sAbl').textContent   = c.ability;
+  document.getElementById('sFoc').textContent   = c.focus;
+  document.getElementById('sQlv').textContent   = c.quests_completed;
+  document.getElementById('sBattle').textContent= ': '+(c.body+c.mentality+c.ability+c.focus+c.level*10);
+}
+
+function renderInv(){
+  const grid=document.getElementById('invGrid'); grid.innerHTML='';
+  for(let i=0;i<10;i++){
+    const sl=document.createElement('div'); sl.className='iSlot';
+    const item=CHAR.inventory[i];
+    if(item){ sl.classList.add('has-item'); sl.textContent=item.icon; sl.title=item.name;
+      if(item.count>1){ const cnt=document.createElement('span'); cnt.className='iCount'; cnt.textContent='x'+item.count; sl.appendChild(cnt); }
+    }
+    grid.appendChild(sl);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  CONSOLE
+// ═══════════════════════════════════════════════════════
+const CON=document.getElementById('console');
+function log(text,type=''){
+  const d=document.createElement('div'); d.className='cLine '+(type||''); d.textContent=text;
+  CON.appendChild(d); while(CON.children.length>30) CON.removeChild(CON.firstChild);
+  CON.scrollTop=CON.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+updateStats(); renderInv();
+log('인생 RPG 시스템 v2.0 부팅...', 'dim');
+log('Supabase 연결 중...', 'blue');
+loadCharacter();
+log('WASD / 방향키 — 이동   │   ⚔ 퀘스트 기록 버튼으로 활동 기록');
+</script>
+</body>
+</html>
